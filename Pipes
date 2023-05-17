@@ -1,1 +1,69 @@
+// This program simulates pipes that are used to transfer data between processes.
+
+// include all the necessary libraries
+#include <stdio.h>    // for system input and output
+#include <stdlib.h>   // for system functions
+#include <unistd.h>   // for system calls
+#include <sys/wait.h> // for wait system call
+#include <time.h>     // for time functions
+
+// define constants
+#define NUM_READINGS 10 // number of readings
+
+// main function
+int main()
+{
+    // declare variables
+    pid_t pid_conv, pid_log, pid_stat, pid_report;               // process IDs
+    int pipe_conv_log[2], pipe_log_stat[2], pipe_stat_report[2]; // pipes
+    int readings[NUM_READINGS];                                  // array of readings
+    int sum = 0;                                                 // sum of readings
+    float mean;                                                  // mean of readings
+
+    // create pipes
+    if (pipe(pipe_conv_log) == -1 || pipe(pipe_log_stat) == -1 || pipe(pipe_stat_report) == -1) // if pipe creation failed
+    {
+        perror("pipe"); // print error message
+        exit(1);        // exit with error
+    }
+
+    // fork Conv process
+    pid_conv = fork(); // fork Conv process
+    srand(time(0));    // seed the random number generator
+
+    // check if fork was successful
+    if (pid_conv == 0) // if Conv process
+    {
+        // Conv process
+        int i;                             // loop counter
+        for (i = 0; i < NUM_READINGS; i++) // loop 10 times
+        {
+            // generate random numbers as readings
+            readings[i] = rand() % 100; // generate a random number between 0 and 99
+        }
+        // send readings to Log and Stat processes
+        write(pipe_conv_log[1], readings, sizeof(int) * NUM_READINGS); // write readings to pipe
+        write(pipe_log_stat[1], readings, sizeof(int) * NUM_READINGS); // write readings to pipe
+        exit(0);                                                       // exit
+    }
+
+    // fork Log process
+    pid_log = fork(); // fork Log process
+
+    // check if fork was successful
+    if (pid_log == 0) // if Log process
+    {
+        // Log process
+        read(pipe_conv_log[0], readings, sizeof(int) * NUM_READINGS); // read readings from pipe
+
+        // write readings to local file
+        FILE *fp = fopen("readings.txt", "w"); // open file for writing
+        int i;                                 // loop counter
+        for (i = 0; i < NUM_READINGS; i++)     // loop 10 times
+        {
+            fprintf(fp, "%d\n", readings[i]); // write reading to file
+        }
+        fclose(fp); // close file
+        exit(0);    // exit
+    }
 
