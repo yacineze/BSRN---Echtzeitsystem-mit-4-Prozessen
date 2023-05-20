@@ -65,5 +65,50 @@ int main()
         }
         fclose(fp); // close file
         exit(0);    // exit
+    }// fork Stat process
+    pid_stat = fork(); // fork Stat process
+
+    // check if fork was successful
+    if (pid_stat == 0) // if Stat process
+    {
+        // Stat process
+        read(pipe_log_stat[0], readings, sizeof(int) * NUM_READINGS); // read readings from pipe
+        int i;                                                        // loop counter
+        for (i = 0; i < NUM_READINGS; i++)                            // loop 10 times
+        {
+            sum += readings[i]; // add reading to sum
+        }
+        // calculate mean
+        mean = (float)sum / NUM_READINGS; // calculate mean
+
+        // send statistical data to Report process
+        write(pipe_stat_report[1], &sum, sizeof(int));    // write sum to pipe
+        write(pipe_stat_report[1], &mean, sizeof(float)); // write mean to pipe
+        exit(0);                                          // exit
     }
+
+    // fork Report process
+    pid_report = fork(); // fork Report process
+
+    // check if fork was successful
+    if (pid_report == 0) // if Report process
+    {
+        // Report process
+        read(pipe_stat_report[0], &sum, sizeof(int));    // read sum from pipe
+        read(pipe_stat_report[0], &mean, sizeof(float)); // read mean from pipe
+
+        // output statistical data to shell
+        printf("Sum: %d\n", sum);   // print sum
+        printf("Mean: %f\n", mean); // print mean
+        exit(0);                    // exit
+    }
+
+    // wait for child processes to terminate
+    waitpid(pid_conv, NULL, 0);   // wait for Conv process to terminate
+    waitpid(pid_log, NULL, 0);    // wait for Log process to terminate
+    waitpid(pid_stat, NULL, 0);   // wait for Stat process to terminate
+    waitpid(pid_report, NULL, 0); // wait for Report process to terminate
+
+    return 0; // exit with success
+}
 
