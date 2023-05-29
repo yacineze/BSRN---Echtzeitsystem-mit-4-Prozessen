@@ -1,1 +1,90 @@
+// This program simulates a message queue that is used to transfer data between processes.
 
+// include all the necessary libraries
+#include <stdio.h>     // for system input and output
+#include <stdlib.h>    // for system functions
+#include <unistd.h>    // for system calls
+#include <sys/wait.h>  // for wait system call
+#include <sys/types.h> // for system data types
+#include <sys/ipc.h>   // for interprocess communication
+#include <sys/msg.h>   // for message queue
+#include <time.h>      // for time functions
+
+// define constants
+#define MSG_TYPE 1 // message type
+
+// define a structure for message
+typedef struct
+{
+    long msg_type;  // message type
+    int values[10]; // array of 10 integers
+} Message;          // name of the structure
+
+// main function
+int main()
+{
+    // declare variables
+    pid_t pid_conv, pid_log, pid_stat, pid_report; // process IDs
+    key_t key;                                     // message queue key
+    int msgid;                                     // message queue ID
+    Message msg;                                   // message structure
+
+    // generate a key for the message queue
+    key = ftok("msgqueue_key", 'A'); // generate a key
+
+    // check if key generation was successful
+    if (key == -1) // if key generation failed
+    {
+        perror("ftok"); // print error message
+        exit(1);        // exit with error
+    }
+
+    // create the message queue
+    msgid = msgget(key, IPC_CREAT | 0666); // create a message queue
+
+    // check if message queue creation was successful
+    if (msgid == -1) // if message queue creation failed
+    {
+        perror("msgget"); // print error message
+        exit(1);          // exit with error
+    }
+
+    // fork Conv process
+    pid_conv = fork(); // fork Conv process
+    srand(time(0));    // seed the random number generator
+
+    // check if fork was successful
+    if (pid_conv == 0) // if Conv process
+    {
+        // Conv process
+        int i;                   // loop counter
+        for (i = 0; i < 10; i++) // loop 10 times
+        {
+            // generate random numbers as readings
+            msg.values[i] = rand() % 100; // generate a random number between 0 and 99
+        }
+        // send message to Log and Stat processes that data is ready
+        msg.msg_type = MSG_TYPE;                                // set message type
+        msgsnd(msgid, &msg, sizeof(Message) - sizeof(long), 0); // send message
+        exit(0);                                                // exit with success
+    }
+
+    // fork Log process
+    pid_log = fork(); // fork Log process
+
+    // check if fork was successful
+    if (pid_log == 0) // if Log process
+    {
+        // Log process
+        msgrcv(msgid, &msg, sizeof(Message) - sizeof(long), MSG_TYPE, 0); // receive message
+
+        // write readings to local file
+        FILE *fp = fopen("readings.txt", "w"); // open file for writing
+        int i;                                 // loop counter
+        for (i = 0; i < 10; i++)               // loop 10 times
+        {
+            fprintf(fp, "%d\n", msg.values[i]); // write reading to file
+        }
+        fclose(fp); // close file
+        exit(0);    // exit with success
+    }
