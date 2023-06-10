@@ -1,1 +1,74 @@
+// This program simulates a shared memory via semaphores that is used to transfer data between processes.
 
+// include all the necessary libraries
+#include <stdio.h>     // for system input and output
+#include <stdlib.h>    // for system functions
+#include <unistd.h>    // for system calls
+#include <sys/wait.h>  // for wait system call
+#include <sys/shm.h>   // for shared memory
+#include <semaphore.h> // for semaphores
+#include <fcntl.h>     // for O_CREAT
+#include <time.h>      // for time functions
+
+// define constants
+#define SHM_SIZE 1024 // shared memory size
+
+// define a structure for shared data
+typedef struct
+{
+    int values[10]; // array of 10 integers
+} SharedData;       // name of the structure
+
+// main function
+int main()
+{
+    // declare variables
+    pid_t pid_conv, pid_log, pid_stat, pid_report;         // process IDs
+    int shmid;                                             // shared memory ID
+    SharedData *shared_data;                               // pointer to shared data
+    sem_t *sem_conv_log, *sem_conv_stat, *sem_stat_report; // semaphores
+
+    // create shared memory segment
+    shmid = shmget(IPC_PRIVATE, SHM_SIZE, IPC_CREAT | 0666); // create a shared memory segment
+
+    // check if shared memory creation was successful
+    if (shmid < 0) // if shared memory creation failed
+    {
+        perror("shmget"); // print error message
+        exit(1);          // exit with error
+    }
+
+    // attach shared memory segment
+    shared_data = (SharedData *)shmat(shmid, NULL, 0); // attach shared memory segment
+
+    // check if shared memory attachment was successful
+    if (shared_data == (void *)-1) // if shared memory attachment failed
+    {
+        perror("shmat"); // print error message
+        exit(1);         // exit with error
+    }
+
+    // initialize semaphores
+    sem_conv_log = sem_open("sem_conv_log", O_CREAT, 0666, 0);       // initialize semaphore
+    sem_conv_stat = sem_open("sem_conv_stat", O_CREAT, 0666, 0);     // initialize semaphore
+    sem_stat_report = sem_open("sem_stat_report", O_CREAT, 0666, 0); // initialize semaphore
+
+    // fork Conv process
+    pid_conv = fork(); // fork Conv process
+    srand(time(0));    // seed the random number generator
+
+    // check if fork was successful
+    if (pid_conv == 0) // if Conv process
+    {
+        // Conv process
+        int i;                   // loop counter
+        for (i = 0; i < 10; i++) // loop 10 times
+        {
+            // generate random numbers as readings
+            shared_data->values[i] = rand() % 100; // generate random number between 0 and 99
+        }
+        // signal Log and Stat processes that data is ready
+        sem_post(sem_conv_log);  // signal Log process
+        sem_post(sem_conv_stat); // signal Stat process
+        exit(0);                 // exit Conv process
+    }
