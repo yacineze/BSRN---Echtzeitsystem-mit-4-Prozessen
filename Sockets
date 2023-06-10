@@ -1,1 +1,94 @@
+// This program simulates sockets that are used to transfer data between processes.
 
+// include all the necessary libraries
+#include <stdio.h>      // for system input and output
+#include <stdlib.h>     // for system functions
+#include <unistd.h>     // for system calls
+#include <sys/wait.h>   // for wait system call
+#include <sys/socket.h> // for socket system call
+#include <netinet/in.h> // for internet domain addresses
+#include <string.h>     // for string functions
+#include <time.h>       // for time functions
+
+// define constants
+#define PORT 8080         // port number
+#define MESSAGE_SIZE 1024 // message size
+
+// define a structure for shared data
+typedef struct
+{
+    int values[10]; // array of 10 integers
+} SharedData;       // name of the structure
+
+// main function
+int main()
+{
+    // declare variables
+    pid_t pid_conv, pid_log, pid_stat, pid_report; // process IDs
+    int sockfd, newsockfd;                         // socket file descriptors
+    socklen_t clilen;                              // client address length
+    char buffer[MESSAGE_SIZE];                     // buffer for messages
+    struct sockaddr_in serv_addr, cli_addr;        // server and client addresses
+    SharedData shared_data;                        // shared data structure
+
+    // create socket
+    sockfd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
+
+    // check if socket creation was successful
+    if (sockfd < 0) // if socket creation failed
+    {
+        perror("socket creation failed"); // print error message
+        exit(1);                          // exit with error
+    }
+
+    // clear serv_addr and set properties
+    memset(&serv_addr, 0, sizeof(serv_addr)); // clear serv_addr
+    serv_addr.sin_family = AF_INET;           // set address family
+    serv_addr.sin_addr.s_addr = INADDR_ANY;   // set IP address
+    serv_addr.sin_port = htons(PORT);         // set port number
+
+    // bind socket to address and port
+    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) // cast serv_addr to sockaddr
+    {
+        perror("bind failed"); // print error message
+        exit(1);               // exit with error
+    }
+
+    // listen for incoming connections
+    if (listen(sockfd, 5) < 0) // allow 5 connections
+    {
+        perror("listen failed"); // print error message
+        exit(1);                 // exit with error
+    }
+
+    // accept incoming connection
+    clilen = sizeof(cli_addr);                                         // get client address length
+    newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen); // cast cli_addr to sockaddr
+
+    // check if accept was successful
+    if (newsockfd < 0) // if accept failed
+    {
+        perror("accept failed"); // print error message
+        exit(1);                 // exit with error
+    }
+
+    // fork Conv process
+    pid_conv = fork(); // create Conv process
+    srand(time(0));    // seed random number generator
+
+    // check if fork was successful
+    if (pid_conv == 0) // if Conv process
+    {
+        // Conv process
+        int i; // loop counter
+
+        // generate 10 random numbers
+        for (i = 0; i < 10; i++)
+        {
+            // generate random numbers as readings
+            shared_data.values[i] = rand() % 100;
+        }
+        // send data to Log and Stat processes
+        send(newsockfd, &shared_data, sizeof(shared_data), 0); // send data to client
+        exit(0);                                               // exit Conv process
+    }
