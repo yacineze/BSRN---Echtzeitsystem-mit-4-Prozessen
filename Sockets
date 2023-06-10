@@ -92,3 +92,84 @@ int main()
         send(newsockfd, &shared_data, sizeof(shared_data), 0); // send data to client
         exit(0);                                               // exit Conv process
     }
+ // fork Log process
+    pid_log = fork(); // create Log process
+
+    // check if fork was successful
+    if (pid_log == 0) // if Log process
+    {
+        // Log process
+        recv(newsockfd, &shared_data, sizeof(shared_data), 0); // receive data from client
+        // write readings to local file
+        FILE *fp = fopen("readings.txt", "w");
+
+        int i;                   // loop counter
+        for (i = 0; i < 10; i++) // loop through readings
+        {
+            fprintf(fp, "%d\n", shared_data.values[i]); // write reading to file
+        }
+        fclose(fp); // close file
+        exit(0);    // exit Log process
+    }
+
+    // fork Stat process
+    pid_stat = fork(); // create Stat process
+
+    // check if fork was successful
+    if (pid_stat == 0) // if Stat process
+    {
+        // Stat process
+        recv(newsockfd, &shared_data, sizeof(shared_data), 0); // receive data from client
+
+        // calculate sum
+        int sum = 0; // sum of readings
+
+        int i;                   // loop counter
+        for (i = 0; i < 10; i++) // loop through readings
+        {
+            sum += shared_data.values[i]; // add reading to sum
+        }
+
+        // calculate mean
+        float mean = (float)sum / 10; // mean of readings
+
+        // write statistical data to shared memory
+        shared_data.values[0] = sum;  // write sum to shared memory
+        shared_data.values[1] = mean; // write mean to shared memory
+
+        // send data to Report process
+        send(newsockfd, &shared_data, sizeof(shared_data), 0); // send data to client
+        exit(0);                                               // exit Stat process
+    }
+
+    // fork
+    pid_report = fork(); // create Report process
+
+    // check if fork was successful
+    if (pid_report == 0)
+    {
+        // Report process
+        recv(newsockfd, &shared_data, sizeof(shared_data), 0); // receive data from client
+
+        // read statistical data from shared memory
+        int sum = shared_data.values[0];    // sum of readings
+        float mean = shared_data.values[1]; // mean of readings
+
+        // generate report and send to client
+        sprintf(buffer, "Sum: %d\nMean: %f\n", sum, mean); // generate report
+        send(newsockfd, buffer, MESSAGE_SIZE, 0);          // send report to client
+        exit(0);                                           // exit Report process
+    }
+
+    // parent process
+    waitpid(pid_conv, NULL, 0);   // wait for Conv process
+    waitpid(pid_log, NULL, 0);    // wait for Log process
+    waitpid(pid_stat, NULL, 0);   // wait for Stat process
+    waitpid(pid_report, NULL, 0); // wait for Report process
+
+    // close sockets
+    close(newsockfd); // close new socket
+    close(sockfd);    // close socket
+
+    return 0; // exit program
+}
